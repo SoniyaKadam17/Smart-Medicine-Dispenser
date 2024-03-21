@@ -1,0 +1,402 @@
+esphome:
+  name: med-disp
+  friendly_name: Med-disp
+  on_boot:
+    then:
+       - ds1307.read_time:
+       - light.turn_on:
+          id: buzzer
+       - delay: 0.1s
+       - light.turn_off:
+          id: buzzer
+       - delay: 2000ms
+       - globals.set:
+           id: page
+           value: '3'
+
+globals:
+- id: page
+  type: int
+  initial_value: "1"
+
+esp32:
+  board: esp32doit-devkit-v1
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "IwoDLrBwg174cOBPW5Dx7/iDT+uWMyhmKyCuxyUjfgQ="
+
+ota:
+  password: "72f064de56404f185c0e2889295ee09e"
+
+wifi:
+  ssid: "U-verse-NoT"
+  password: "vetlife2019not"
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Med-Disp"
+    password: "soniya123"
+
+captive_portal:
+
+servo:
+  - id: servo1
+    output: servo_output_1
+    # auto_detach_time: 1s
+    # transition_length: 0.25s
+  # - id: servo2
+  #   output: servo_output_2
+  #   transition_length: 0.25s
+  #   auto_detach_time: 1s
+
+output:
+#   - platform: ledc
+#     pin: GPIO14
+#     id: rtttl_o
+  - id: buzzer_output
+    platform: gpio
+    pin: GPIO27
+
+  - platform: ledc
+    id: servo_output_1
+    pin: GPIO32
+    frequency: 50 Hz
+    
+  # - platform: ledc
+  #   id: servo_output_2
+  #   pin: GPIO33
+  #   frequency: 50 Hz
+
+number:
+  - platform: template
+    name: Servo Control
+    min_value: -100
+    max_value: 100
+    step: 1
+    optimistic: true
+    set_action:
+      then:
+        - servo.write:
+            id: servo1
+            level: !lambda 'return x / 100.0;'
+
+  - platform: template
+    name: "Pill 1 count"
+    id: pill_1_count
+    optimistic: true
+    restore_value: True
+    min_value: 0
+    max_value: 10
+    step: 1
+
+  - platform: template
+    name: "Pill 2 count"
+    id: pill_2_count
+    optimistic: true
+    restore_value: True
+    min_value: 0
+    max_value: 10
+    step: 1
+
+  - platform: template
+    name: "Hours"
+    id: hours
+    optimistic: true
+    restore_value: True
+    min_value: 0
+    max_value: 24
+    initial_value: 15
+    step: 1
+
+  - platform: template
+    name: "Minutes"
+    id: minutes
+    optimistic: true
+    restore_value: True
+    initial_value: 0
+    min_value: 0
+    max_value: 59
+    step: 1
+
+button:
+  - platform: template
+    name: "Trigger"
+    id: http_trigger_1
+    on_press:
+      then:
+       - light.turn_on:
+          id: led
+          brightness: 100%
+          red: 100%
+          green: 100%
+          blue: 100%
+          transition_length: 0.25s
+       - servo.write:
+           id: servo1
+           level: 100.0%
+       - delay: 1500ms
+       - servo.write:
+           id: servo1
+           level: -100.0%
+       - number.operation:
+          id: pill_1_count
+          operation: Decrement
+          cycle: False
+       - number.operation:
+          id: pill_2_count
+          operation: Decrement
+          cycle: False
+       - light.turn_on:
+          id: led
+          brightness: 100%
+          red: 0%
+          green: 100%
+          blue: 0%
+       - light.turn_on:
+          id: buzzer
+       - delay: 1.5s
+       - light.turn_off:
+          id: buzzer
+       - delay: 1.5s
+       - light.turn_on:
+          id: buzzer
+       - delay: 4000ms
+       - light.turn_off:
+          id: buzzer
+       - light.turn_off:
+          id: led
+
+display:
+  # - platform: ssd1306_i2c
+  #   id: my_display
+  #   model: "SH1106 128x64"
+  #   address: 0x3C
+  #   pages:
+  #     - id: time_page
+  #       lambda: |-  
+  #         it.strftime(64, 0, id(clkfont), TextAlign::TOP_CENTER, "%H:%M", id(ds1307_time).now());
+
+  - platform: ssd1306_i2c
+    id: my_display
+    model: "SH1106 128x64"
+    address: 0x3C
+    lambda: |-
+          switch (id(page)){
+            case 1:
+              it.strftime(64, 0, id(clkfont), TextAlign::TOP_CENTER, "%H:%M", id(ds1307_time).now());
+              break;
+            case 2: 
+              it.printf(64, 0, id(my_font15), TextAlign::TOP_CENTER, "IP Address");
+              it.printf(64, 44, id(my_font18), TextAlign::BOTTOM_CENTER, id(ip).state.c_str());
+              break;
+            case 3: 
+              it.printf(8, 0, id(my_font15), TextAlign::TOP_LEFT, "Pill 1");
+              it.printf(118, 0, id(my_font15), TextAlign::TOP_RIGHT, "Pill 2");
+              it.printf(8, 44, id(my_font20), TextAlign::BOTTOM_LEFT, "%0.1f", id(pill_1_count).state);
+              it.printf(118, 44, id(my_font20), TextAlign::BOTTOM_RIGHT, "%0.1f", id(pill_2_count).state);
+              break;
+            case 4: 
+              it.printf(64, 0, id(my_font15), TextAlign::TOP_CENTER, "Pulse");
+              it.printf(64, 44, id(my_font18), TextAlign::BOTTOM_CENTER,"%0.1f%%", id(pulse).state);
+              break;
+          }
+
+
+font:  
+  - file: 'Clockface.ttf'
+    id: clkfont
+    size: 40
+  - file: "sfpro.ttf"
+    id: my_font20
+    size: 20
+  - file: "sfpro.ttf"
+    id: my_font18
+    size: 18
+  - file: "sfpro.ttf"
+    id: my_font15
+    size: 15
+    
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO35
+      mode:
+        input: true
+        pullup: False
+      inverted: true
+    name: "Pill 1 sensor"
+    id: pill_1_sensor
+    on_press:
+      then:
+       - number.operation:
+          id: pill_1_count
+          operation: Increment
+          cycle: False
+
+  - platform: gpio
+    pin:
+      number: GPIO34
+      mode:
+        input: true
+        pullup: False
+      inverted: true
+    name: "Pill 2 sensor"
+    id: pill_2_sensor
+    on_press:
+      then:
+       - number.operation:
+          id: pill_2_count
+          operation: Increment
+          cycle: False
+
+  - platform: gpio
+    pin:
+      number: GPIO15
+      mode:
+        input: true
+        pullup: False
+      inverted: False
+    name: "Push Button"
+    id: push_button
+    # on_press:
+    #   then:
+    #    - button.press: http_trigger
+    on_multi_click:
+    - timing:
+        - ON for at most 1s
+      then:
+        - lambda: |-
+            id(page) = (id(page) + 1);
+            if (id(page) > 4) {
+            id(page) = 1;
+            }
+        - light.turn_on:
+           id: buzzer
+        - delay: 0.2s
+        - light.turn_off:
+           id: buzzer
+    - timing:
+        - ON for at least 2.5s
+      then:
+        - if:
+            condition: 
+              lambda: 'return id(page) == 1;'
+            then:
+              - light.turn_on:
+                  id: buzzer
+              - delay: 0.2s
+              - light.turn_off:
+                  id: buzzer
+              - button.press: http_trigger_1
+              - delay: 0.5s
+              - light.turn_on:
+                  id: buzzer
+              - delay: 0.2s
+              - light.turn_off:
+                  id: buzzer
+        - if:
+            condition: 
+              lambda: 'return id(page) == 3;'
+            then:
+              - light.turn_on:
+                  id: buzzer
+              - delay: 0.2s
+              - light.turn_off:
+                  id: buzzer
+              - number.set:
+                  id: pill_1_count
+                  value: 0
+              - number.set:
+                  id: pill_2_count
+                  value: 0
+              - delay: 0.5s
+              - light.turn_on:
+                  id: buzzer
+              - delay: 0.2s
+              - light.turn_off:
+                  id: buzzer       
+
+
+  - platform: template
+    id: time_trigger
+    name: "Time trigger"
+    lambda: return id(ds1307_time).now().hour == (id(hours).state) && id(ds1307_time).now().minute == (id(minutes).state);
+    filters:
+      - delayed_off: 2s
+    on_press:
+      then:
+        - button.press: http_trigger_1
+
+light:
+  - platform: neopixelbus
+    type: RGB
+    id: led
+    variant: WS2811
+    pin: GPIO25
+    num_leds: 1
+    name: "Light"
+    effects:
+      - pulse
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 0.5s
+          update_interval: 0.5s
+
+  - platform: binary
+    name: "Buzzer"
+    output: buzzer_output
+    id: buzzer
+
+time:
+  - platform: ds1307
+    id: ds1307_time
+    timezone: Asia/Kolkata
+    # on_time:
+    #   - seconds: 0
+    #     minutes: 30
+    #     hours: 7
+    #     days_of_week: MON-FRI
+    #     then:
+    #       - button.press: http_trigger
+
+  - platform: sntp
+    id: esptime
+    timezone: Asia/Kolkata
+    on_time_sync:
+      then:
+        ds1307.write_time:
+
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: ESP IP Address
+      id: ip
+
+i2c:
+  sda: GPIO4
+  scl: GPIO5
+  scan: False
+  id: bus_a
+  frequency: 800kHz
+
+sensor:
+  - platform: pulse_counter
+    pin: GPIO26
+    name: "Pulse Counter"
+    id: pulse
+
+# rtttl:
+#   output: rtttl_o
+
+web_server:
+  port: 80
+  local: true
+
+    
